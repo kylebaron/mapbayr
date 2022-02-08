@@ -111,13 +111,18 @@ my_est <- mapbayest(my_model, data = my_data)
 ```
 As building dataset into a NM-TRAN format can be painful, you can use pipe-friendly `obs_lines()`, `adm_lines()` and `add_covariates()` functions in order to pass administration and observation information, and perform the estimation subsequently. 
 ```{r, eval=FALSE}
-my_est <- my_model %>% 
+my_est <- 
+prep <- my_model %>% 
   adm_lines(time = 0, amt = 100, rate = 20) %>% 
   obs_lines(time = 6, DV = 3.9) %>% 
   obs_lines(time = 20, DV = 1.1) %>% 
   obs_lines(time = 24, DV = 2, mdv = 1) %>% 
-  add_covariates(list(BW = 90)) %>% 
-  mapbayest()
+  add_covariates(list(BW = 90)) 
+
+mapbayest(prep) 
+
+  microbenchmark::microbenchmark(res <- mapbayest(prep, verbose = FALSE), times = 20)
+res$information
 ```
 
 #### 4) Then, use the estimations

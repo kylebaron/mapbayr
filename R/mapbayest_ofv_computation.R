@@ -56,10 +56,10 @@ compute_ofv <- function(eta, mrgsolve_model, data, sigma, log_transformation, DV
   output <- mrgsim_q(x = mod, data = data, output = "df")
 
   #Add compartment column
-  output[["cmt"]] <- data[["cmt"]]
+  output[["cmt"]] <- data[,"cmt"]
 
   #Filter MDV == 0
-  output <- output[data$mdv==0,]
+  output <- output[data[,"mdv"]==0,]
 
   #Get DVpred
   DVpred <- output$DV

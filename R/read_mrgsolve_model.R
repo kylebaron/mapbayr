@@ -9,13 +9,13 @@
 #' model <- mrgsolve::mread("ex_mbr1", mbrlib())
 #' adm_cmt(model)
 adm_cmt <- function(x){
-  dat <- as.list(x)$details$data
+  dat <- x@annot$data#as.list(x)$details$data
 
   if(is.null(dat[["block"]])){ # Is it annotated ?
     v <- NULL
   } else { # If it is annotated, find where "ADM" is set
     datcmt <- dat[dat$block %in% c("CMT", "INIT"),]
-    admcmtname <- datcmt$name[str_detect(tolower(datcmt$options), "adm")]
+    admcmtname <- datcmt$name["adm" %in% tolower(datcmt$options)]
     v <- x@Icmt[x@cmtL %in% admcmtname]
 
     if(length(v)== 0){ # If not found, return NULL
@@ -37,13 +37,13 @@ adm_cmt <- function(x){
 #' model <- mrgsolve::mread("ex_mbr1", mbrlib())
 #' obs_cmt(model)
 obs_cmt <- function(x){
-  dat <- as.list(x)$details$data
+  dat <- x@annot$data#as.list(x)$details$data
 
   if(is.null(dat[["block"]])){ # Is it annotated ?
     v <- NULL
   } else { # If it is annotated, find where "OBS" is set
     datcmt <- dat[dat$block %in% c("CMT", "INIT"),]
-    obscmtname <- datcmt$name[str_detect(tolower(datcmt$options), "obs")]
+    obscmtname <- datcmt$name["obs" %in% tolower(datcmt$options)]
     v <- x@Icmt[x@cmtL %in% obscmtname]
 
     if(length(v)== 0){ # If not found, return NULL
@@ -83,12 +83,15 @@ fit_cmt <- function(x, data){
 #' model <- mrgsolve::mread("ex_mbr1", mbrlib())
 #' adm_0_cmt(model)
 adm_0_cmt <- function(x){
-  v <- paste0("D_", x@cmtL) %>%
-    map(str_detect, string = x@code) %>%
-    map(any) %>%
-    as.logical() %>%
-    which()
-
+  # v <- paste0("D_", x@cmtL) %>%
+  #   map(str_detect, string = x@code) %>%
+  #   map(any) %>%
+  #   as.logical() %>%
+  #   which()
+  v <- vapply(paste0("D_", x@cmtL), FUN=function(d) {
+    any(grepl(d, x@code))
+  }, FALSE)
+  v <- which(v)
   if(length(v)== 0){
     v <- NULL
   }
@@ -119,8 +122,8 @@ log_transformation <- function(x){
 #' @return a vector of character
 #' @noRd
 eta_names <- function(x){
-  parnames <- names(param(x))
-  v <- parnames[grepl("^ETA\\d+$", parnames)]
+  parnames <- names(x@param)
+  v <- parnames[grepl("^ETA\\d+$", parnames, perl = TRUE)]
   if(length(v)== 0){
     v <- NULL
   }
@@ -144,7 +147,7 @@ n_eta <- function(x){
 #' @return a vector of character
 #' @noRd
 eta_descr <- function(x){
-  dat <- as.list(x)$details$data
+  dat <- x@annot$data
 
   if(is.null(dat[["block"]])){ # Is it annotated ? if not put ETA1, ETA2 etc...
     v <- eta_names(x)
@@ -200,7 +203,7 @@ mbr_cov_refvalues <- function(x){
 #' model <- mrgsolve::mread("ex_mbr1", mbrlib())
 #' mbr_cov_descr(model)
 mbr_cov_descr <- function(x){
-  as.list(x)$details$data %>%
+  x@annot$data %>%
     filter(.data$name %in% mbr_cov_names(x)) %>%
     mutate(covariate_description = paste0(.data$descr, " (", .data$unit, ")")) %>%
     pull(.data$covariate_description)

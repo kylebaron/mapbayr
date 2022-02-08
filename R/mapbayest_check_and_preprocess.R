@@ -31,15 +31,17 @@ check_mapbayr_model <- function(x){
     if(is.null(obs_cmt(x))) check <- bind_rows(check, list(stop = FALSE, descr = "$CMT: No [OBS] compartment(s) defined (optionnal)."))
 
     # $OMEGA as much as ETA ?
-    nomega <- length(diag(omat(x, make = T)))
+    omeg <- omat(x, make = TRUE)
+    nomega <- length(diag(omeg))
     if(nomega != neta) check <- bind_rows(check, list(stop = TRUE, descr = "$OMEGA: Length of omega matrix diagonal not equal to the number of ETA defined in $PARAM."))
 
     # OMEGA : no value = 0.
-    omega0 <- which(odiag(x) == 0)
+    omega0 <- which(diag(omeg) == 0)
     if(length(omega0)) check <- bind_rows(check, list(stop = TRUE, descr = paste0("$OMEGA: ", paste0(omega0, collapse = "-"), " is (are) equal to 0. Cannot be equal to zero.")))
 
     # $SIGMA
-    nsig <- length(diag(smat(x, make = T)))
+    sigm <- smat(x, make = TRUE)
+    nsig <- length(diag(sigm))
     if(nsig%%2 !=0) check <- bind_rows(check, list(stop = TRUE, descr = paste0("$SIGMA: A pair number of sigma values is expected (", nsig, " values found).")))
     if(is.null(obs_cmt(x))){
       if(nsig != 2) check <- bind_rows(check, list(stop = TRUE,  descr = "$SIGMA: Define only one pair of sigma values (prop + add errors) in $SIGMA if you do not use [OBS] in $CMT. (One observation compartment will be defined from MDV=0 lines in individual data"))
@@ -48,7 +50,7 @@ check_mapbayr_model <- function(x){
       if(ncmt != nsig/2) check <- bind_rows(check, list(stop = TRUE, descr = "$SIGMA: Define one pair of sigma values (prop + add errors) per [OBS] compartment(s) defined in $CMT."))
     }
 
-    dsig <- diag(smat(x, make = T))
+    dsig <- diag(sigm)
     if(all(dsig == 0)) check <- bind_rows(check, list(stop = TRUE, descr = paste0("$SIGMA: All the values of SIGMA are equal to zero, which is not allowed.")))
 
     if(log_transformation(x)){
@@ -70,12 +72,16 @@ check_mapbayr_data <- function(data){
   if(is.null(data)) stop("No data provided", call. = F)
 
   # Are all column numerics
-  non_num <- names(data)[!map_lgl(data, is.numeric)]
-  if(length(non_num)) stop(paste("Non-numeric column found:", paste(non_num, collapse = " ")), call. = F)
+  #non_num <- names(data)[!vapply(data, is.numeric, TRUE)]
+  #if(length(non_num)) stop(paste("Non-numeric column found:", paste(non_num, collapse = " ")), call. = F)
 
   # Are required items present?
   data <- data %>%
     rename_with(tolower, any_of(c("TIME", "AMT", "MDV", "CMT", "EVID", "II", "ADDL", "SS", "RATE")))
+
+  # tran <- c("TIME", "AMT", "MDV", "CMT", "EVID", "II", "ADDL", "SS", "RATE")
+  # make_lower <- names(data) %in% tran
+  # names(data[, make_lower]) <- tolower(names(data[, make_lower]))
 
   required_nmtran_item <- c("ID", "time", "evid", "cmt", "amt", "DV")
   miss_item <- required_nmtran_item[!(required_nmtran_item %in% names(data))]
@@ -87,9 +93,20 @@ check_mapbayr_data <- function(data){
 
   # Are MDV/EVID requirements respected?
 
-  if(nrow(filter(data, .data$mdv == 0 & .data$evid == 2)) > 0) stop("Lines with evid = 2 & mdv = 0 are not allowed", call. = F)
-  if(nrow(filter(data, .data$mdv == 0 & .data$evid != 0)) > 0) stop("Lines with mdv = 0 must have evid = 0.", call. = F)
-  if(nrow(filter(data, .data$time == 0, .data$mdv == 0)) > 0)  stop("Observation line (mdv = 0) not accepted at time = 0", call. = F)
+  #if(nrow(filter(data, .data$mdv == 0 & .data$evid == 2)) > 0) stop("Lines with evid = 2 & mdv = 0 are not allowed", call. = F)
+  #if(nrow(filter(data, .data$mdv == 0 & .data$evid != 0)) > 0) stop("Lines with mdv = 0 must have evid = 0.", call. = F)
+  #if(nrow(filter(data, .data$time == 0, .data$mdv == 0)) > 0)  stop("Observation line (mdv = 0) not accepted at time = 0", call. = F)
+
+  if(any(data$mdv==0 & data$evid==2)) {
+    stop("Lines with evid = 2 & mdv = 0 are not allowed", call. = F)
+  }
+  if(any(data$mdv==2 & data$evid != 0)) {
+    stop("Lines with mdv = 0 must have evid = 0.", call. = F)
+  }
+  if(any(data$time==0 & data$mdv ==0)) {
+    stop("Observation line (mdv = 0) not accepted at time = 0", call. = F)
+  }
+
 
   return(data)
 }
@@ -99,7 +116,7 @@ check_mapbayr_data <- function(data){
 check_mapbayr_modeldata <- function(x, data){
   # --- Checks full data vs model
 
-  varinmodel <- c(names(x@param), as.list(x)$cpp_variables$var)
+  varinmodel <- c(names(x@param), x@shlib$cpp_variables$var)
   varinmodel <- varinmodel[!varinmodel %in% c("DV", mbr_cov_names(x))]
   varindata <- names(data)
   commonvar <- varindata[varindata %in% varinmodel]
@@ -125,11 +142,13 @@ split_mapbayr_data <- function(data){
 
   iID <- unique(data$ID)
 
-  idata <- data %>%
-    mutate(split_ID = factor(.data$ID, levels = iID)) %>%
-    group_by(.data$split_ID) %>%
-    group_split(.keep = FALSE) %>%
-    set_names(iID)
+  # idata <- data %>%
+  #   mutate(split_ID = factor(.data$ID, levels = iID)) %>%
+  #   group_by(.data$split_ID) %>%
+  #   group_split(.keep = FALSE) %>%
+  #   set_names(iID)
+  idata <- split(data, factor(data$ID, levels = iID))
+  names(idata) <- iID
 
   return(idata)
 }
@@ -174,18 +193,16 @@ preprocess.optim <- function(x, method, control, force_initial_eta, quantile_bou
   if(is.null(control$kkt)){
     control <- c(control, list(kkt = FALSE))
   }
+  bound = -Inf
   if(method == "L-BFGS-B"){
     if(is.null(control$fnscale))
       control <- c(control, list(fnscale = 0.001))
     if(is.null(control$lmm))
       control <- c(control, list(lmm = 7))
+    bound <- get_quantile(x, .p = quantile_bound)
   }
 
   #lower, upper
-  bound = -Inf
-  if(method == "L-BFGS-B"){
-     bound <- get_quantile(x, .p = quantile_bound)
-  }
 
   arg <- list(
     par = initial_eta,
@@ -245,7 +262,7 @@ preprocess.ofv.id <- function(x, iddata){
   iDVobs <- iddata[iddata$mdv==0,]$DV #keep observations to fit only
   if(log_transformation(x)) iDVobs <- log(iDVobs)
 
-  list(data = iddata,
+  list(data = mrgsolve:::valid_data_set(iddata, x),
        DVobs = iDVobs
   )
 }

@@ -6,7 +6,7 @@ do_optimization <- function(arg.ofv, arg.optim, verbose, reset){
 
   # First the optimization is done once.
 
-  if(verbose) cat(paste0("\nID ", unique(arg.ofv$data$ID), "..."))
+  if(verbose) cat(paste0("\nID ", unique(arg.ofv$data[,"ID"]), "..."))
   opt <- do.call(quietly(optimx), c(arg.optim, arg.ofv))$result
 
   RUN <- 1
